@@ -229,9 +229,9 @@ module.exports = function(schema, option) {
       case 'page':
       case 'block':
         if (schema.children && schema.children.length) {
-          xml = `<div${classString}${props}>${transform(schema.children)}</div>`;
+          xml = `<view${classString}${props}>${transform(schema.children)}</view>`;
         } else {
-          xml = `<div${classString}${props} />`;
+          xml = `<view${classString}${props} />`;
         }
         break;
     }
