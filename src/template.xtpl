@@ -3,6 +3,7 @@
 </template>
 
 <script lang="ts" setup>
+  import { RouteUtils } from '@/src/utils/route-utils';
   {{{imports}}}
 </script>
 
