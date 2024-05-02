@@ -1,14 +1,11 @@
-'use strict';
-cs
+<template>
+  {{{template}}}
+</template>
 
-import React, { Component } from 'react';
+<script lang="ts" setup>
+  {{{imports}}}
+</script>
 
-{{{imports}}}
-
-{{{utils}}}
-
-{{{style}}}
-
-{{{classes}}}
-
-{{{exports}}}
+<style scoped>
+  {{{styles.join('\n')}}}
+</style>
