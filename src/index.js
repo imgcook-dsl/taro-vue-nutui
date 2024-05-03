@@ -1,5 +1,20 @@
-module.exports = function(schema, option) {
-  const {prettier} = option;
+
+const nameMapping = {
+  'page': 'View',
+  'text': 'Text',
+  'div': 'View',
+  'image': 'Image',
+  'block': 'View',
+  'input': 'Input',
+  'upload': 'Upload',
+  'radiogroup': 'RadioGroup',
+  'switch': 'Switch',
+  'datepicker': 'DatePicker',
+  'button': 'Button'
+}
+
+module.exports = function (schema, option) {
+  const { prettier } = option;
 
   // imports
   const imports = [];
@@ -13,8 +28,8 @@ module.exports = function(schema, option) {
   // Classes 
   const classes = [];
 
-  // 1vw = width / 100
-  const _w = option.responsive.width / 100;
+  // import 组件名称列表
+  const componentNames = {};
 
   const isExpression = (value) => {
     return /^\{\{.*\}\}$/.test(value);
@@ -41,37 +56,38 @@ module.exports = function(schema, option) {
   };
 
   // convert to responsive unit, such as vw
-  const parseStyle = (style) => {
+  const parseStyle = (style, type) => {
+    const parsedStyles = [];
+    const exceptRnStyles = [];
+
     for (let key in style) {
+      const name = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLocaleLowerCase();
+      const value = style[key];
+
+      if (type === 'text' && (key === 'width' || key === 'height')) {
+        continue;
+      }
+
       switch (key) {
-        case 'fontSize':
-        case 'marginTop':
-        case 'marginBottom':
-        case 'paddingTop':
-        case 'paddingBottom':
-        case 'height':
-        case 'top':
-        case 'bottom':
-        case 'width':
-        case 'maxWidth':
-        case 'left':
-        case 'right':
-        case 'paddingRight':
-        case 'paddingLeft':
-        case 'marginLeft':
-        case 'marginRight':
-        case 'lineHeight':
-        case 'borderBottomRightRadius':
-        case 'borderBottomLeftRadius':
-        case 'borderTopRightRadius':
-        case 'borderTopLeftRadius':
-        case 'borderRadius':
-          style[key] = (parseInt(style[key]) / _w).toFixed(2) + 'vw';
+        case 'whiteSpace':
+        case 'boxSizing':
+        case 'backgroundImage':
+        case 'borderBottomStyle':
+        case 'textOverflow':
+        case 'visibility':
+        case 'filter':
+          exceptRnStyles.push(`${name}: ${value}`);
           break;
+        default:
+          parsedStyles.push(`${name}: ${value}`);
       }
     }
 
-    return style;
+    if (exceptRnStyles.length > 0) {
+      exceptRnStyles.unshift('\n/*  #ifndef rn */\n');
+      exceptRnStyles.push('\n/*  #endif */\n');
+    }
+    return parsedStyles.concat(exceptRnStyles);
   }
 
   // parse function, return params and content
@@ -99,18 +115,22 @@ module.exports = function(schema, option) {
       if (isReactNode) {
         return value;
       } else {
-        return `'${value}'`;
+        return `"${value}"`;
       }
     } else if (typeof value === 'function') {
-      const {params, content} = parseFunction(value);
+      const { params, content } = parseFunction(value);
       return `(${params}) => {${content}}`;
+    } else if (typeof value === 'object') {
+      return JSON.stringify(value);
+    } else if (typeof value === 'boolean') {
+      return value;
     }
   }
 
   // parse async dataSource
   const parseDataSource = (data) => {
     const name = data.id;
-    const {uri, method, params} = data.options;
+    const { uri, method, params } = data.options;
     const action = data.type;
     let payload = {};
 
@@ -201,37 +221,58 @@ module.exports = function(schema, option) {
   const generateRender = (schema) => {
     const type = schema.componentName.toLowerCase();
     const className = schema.props && schema.props.className;
-    const classString = className ? ` style={styles.${className}}` : '';
+    const classString = className ? ` className='${className}'` : '';
 
     if (className) {
-      style[className] = parseStyle(schema.props.style);
+      style[className] = parseStyle(schema.props.style, type);
     }
+
+    componentNames[nameMapping[type]] = true;
 
     let xml;
     let props = '';
 
     Object.keys(schema.props).forEach((key) => {
-      if (['className', 'style', 'text', 'src'].indexOf(key) === -1) {
+      if (['className', 'style', 'text', 'src', 'lines', 'dealGradient'].indexOf(key) === -1) {
         props += ` ${key}={${parseProps(schema.props[key])}}`;
       }
     })
-
-    switch(type) {
+    let isContainer = false;
+    if (schema.componentName === 'Page' || schema.componentName === 'Block') {
+      isContainer = true;
+    }
+    
+    // 设置标签类型
+    switch (type) {
       case 'text':
         const innerText = parseProps(schema.props.text, true);
-        xml = `<span${classString}${props}>${innerText}</span>`;
+        xml = `<${nameMapping[type]}${classString}${props}>${innerText}</${nameMapping[type]}>`;
         break;
       case 'image':
         const source = parseProps(schema.props.src);
-        xml = `<img${classString}${props} src={${source}} />`;
+        xml = `<${nameMapping[type]}${classString}${props} src=${source} />`;
+        break;
+      case 'input':
+      case 'upload':
+      case 'switch':
+      case 'radiogroup':
+      case 'datepicker':
+        xml = `<${nameMapping[type]}${classString}${props} />`;
+        break;
+      case 'button':
+        if (schema.children && typeof schema.children === 'string') {
+          xml = `<${nameMapping[type]}${classString}${props}>${schema.children}</${nameMapping[type]}>`;
+        } else {
+          xml = `<${nameMapping[type]}${classString}${props} />`;
+        }
         break;
       case 'div':
       case 'page':
       case 'block':
         if (schema.children && schema.children.length) {
-          xml = `<view${classString}${props}>${transform(schema.children)}</view>`;
+          xml = `<${nameMapping[type]}${classString}${props}>${transform(schema.children)}</${nameMapping[type]}>`;
         } else {
-          xml = `<view${classString}${props} />`;
+          xml = `<${nameMapping[type]}${classString}${props} />`;
         }
         break;
     }
@@ -239,10 +280,10 @@ module.exports = function(schema, option) {
     if (schema.loop) {
       xml = parseLoop(schema.loop, schema.loopArgs, xml)
     }
-    if (schema.condition) {
+    if (schema.condition && !isContainer) {
       xml = parseCondition(schema.condition, xml);
     }
-    if (schema.loop || schema.condition) {
+    if (schema.loop || (schema.condition && !isContainer)) {
       xml = `{${xml}}`;
     }
 
@@ -250,7 +291,7 @@ module.exports = function(schema, option) {
   }
 
   // parse schema
-  const transform = (schema) => {
+  const transform = (schema, flag) => {
     let result = '';
 
     if (Array.isArray(schema)) {
@@ -260,14 +301,14 @@ module.exports = function(schema, option) {
     } else {
       const type = schema.componentName.toLowerCase();
 
-      if (['page', 'block'].indexOf(type) !== -1) {
+      if (['page', 'block'].indexOf(type) !== -1 && flag) {
         // 容器组件处理: state/method/dataSource/lifeCycle/render
         const states = [];
         const lifeCycles = [];
         const methods = [];
         const init = [];
         const render = [`render(){ return (`];
-        let classData = [`class ${schema.componentName}_${classes.length} extends Component {`];
+        let classData = [`class Index extends Component {`];
 
         if (schema.state) {
           states.push(`state = ${toString(schema.state)}`);
@@ -324,7 +365,6 @@ module.exports = function(schema, option) {
         result += generateRender(schema);
       }
     }
-
     return result;
   };
 
@@ -335,13 +375,19 @@ module.exports = function(schema, option) {
   }
 
   // start parse schema
-  transform(schema);
+  transform(schema, true);
 
-  const prettierOpt = {
-    parser: 'babel',
-    printWidth: 120,
-    singleQuote: true
-  };
+
+  // 输出外部类样式
+  function printOuterStyle(style) {
+    let result = '';
+    for (let key in style) {
+      result += `.${key} {
+         ${style[key].join(';')} 
+        } \n`
+    }
+    return result;
+  }
 
   return {
     panelDisplay: [
@@ -349,20 +395,27 @@ module.exports = function(schema, option) {
         panelName: `index.jsx`,
         panelValue: prettier.format(`
           'use strict';
-
-          import React, { Component } from 'react';
+          import Taro, { Component } from '@tarojs/taro';
+          import { ${Object.keys(componentNames).join(', ')} } from '@tarojs/components';
           ${imports.join('\n')}
-          import styles from './style.js';
+          import './index.less';
           ${utils.join('\n')}
           ${classes.join('\n')}
-          export default ${schema.componentName}_0;
-        `, prettierOpt),
+          export default Index;
+        `, {
+          parser: 'babel',
+          printWidth: 120,
+          singleQuote: true
+        }),
         panelType: 'js',
       },
       {
-        panelName: `style.js`,
-        panelValue: prettier.format(`export default ${toString(style)}`, prettierOpt),
-        panelType: 'js'
+        panelName: `index.less`,
+        panelValue: prettier.format(`${printOuterStyle(style)}`, {
+          parser: 'less',
+          printWidth: 120,
+        }),
+        panelType: 'less'
       }
     ],
     noTemplate: true

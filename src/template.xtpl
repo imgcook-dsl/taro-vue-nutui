@@ -1,12 +1,13 @@
-<template>
-  {{{template}}}
-</template>
+'use strict';
 
-<script lang="ts" setup>
-  import { RouteUtils } from '@/src/utils/route-utils';
-  {{{imports}}}
-</script>
+import React, { Component } from 'react';
 
-<style scoped>
-  {{{styles.join('\n')}}}
-</style>
+{{{imports}}}
+
+{{{utils}}}
+
+{{{style}}}
+
+{{{classes}}}
+
+{{{exports}}}
