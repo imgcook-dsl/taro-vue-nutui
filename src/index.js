@@ -397,6 +397,8 @@ module.exports = function (schema, option) {
           'use strict';
           import Taro, { Component } from '@tarojs/taro';
           import { ${Object.keys(componentNames).join(', ')} } from '@tarojs/components';
+          import { RouteUtils } from '@/src/utils/route-utils';
+          
           ${imports.join('\n')}
           import './index.less';
           ${utils.join('\n')}
